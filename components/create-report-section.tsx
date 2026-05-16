@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { API_BASE_URL } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 type CreateReportSectionProps = {
   masterProductId: string;
@@ -44,20 +44,10 @@ export function CreateReportSection({ masterProductId }: CreateReportSectionProp
           .filter(Boolean),
       };
 
-      const response = await fetch(`${API_BASE_URL}/reports`, {
+      const data = await apiFetch<CreateReportResponse>("/reports", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(payload),
       });
-
-      if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string; message?: string };
-        throw new Error(data.error ?? data.message ?? `Failed (${response.status})`);
-      }
-
-      const data = (await response.json()) as CreateReportResponse;
       setSuccess(`Report created successfully. Report ID: ${data.reportId}`);
       setTitle("");
       setConsumerName("");

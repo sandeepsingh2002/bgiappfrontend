@@ -1,6 +1,6 @@
 import { TraceabilityView } from "@/components/traceability-view";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { SAMPLE_MASTER_PRODUCT_ID, sampleTraceabilityData } from "@/lib/sample-traceability";
+import { apiFetch } from "@/lib/api";
 
 type TraceabilityPageProps = {
   params: Promise<{ masterProductId: string }>;
@@ -8,16 +8,23 @@ type TraceabilityPageProps = {
 
 export default async function TraceabilityPage({ params }: TraceabilityPageProps) {
   const { masterProductId } = await params;
-  if (masterProductId !== SAMPLE_MASTER_PRODUCT_ID) {
+  let data: unknown;
+
+  try {
+    data = await apiFetch<unknown>(`/public/traceability/${encodeURIComponent(masterProductId)}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to load traceability details.";
+
     return (
       <main className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-6">
         <div className="mx-auto max-w-3xl">
           <Card className="border-amber-300">
             <CardHeader>
-              <CardTitle>Sample Route Available</CardTitle>
+              <CardTitle>Traceability Not Available</CardTitle>
               <CardDescription>
-                This page is hardcoded for <span className="font-mono">{SAMPLE_MASTER_PRODUCT_ID}</span>. Open that ID
-                to view complete details.
+                Could not load traceability data for <span className="font-mono">{masterProductId}</span>.
+                <br />
+                {message}
               </CardDescription>
             </CardHeader>
           </Card>
@@ -26,5 +33,5 @@ export default async function TraceabilityPage({ params }: TraceabilityPageProps
     );
   }
 
-  return <TraceabilityView data={sampleTraceabilityData} />;
+  return <TraceabilityView data={data} />;
 }

@@ -1,5 +1,12 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://15.207.86.248:3000/api/v1";
 export const ADMIN_TOKEN_COOKIE = "admin_token";
+
+function getApiBaseUrl(): string {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error("Missing NEXT_PUBLIC_API_BASE_URL environment variable.");
+  }
+  return baseUrl;
+}
 
 export function getAuthHeaders(token?: string): HeadersInit {
   if (!token) return {};
@@ -11,7 +18,7 @@ export async function apiFetch<T>(
   init?: RequestInit,
   token?: string,
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",

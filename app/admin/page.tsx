@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ADMIN_TOKEN_COOKIE, apiFetch } from "@/lib/api";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 type Producer = {
   _id: string;
@@ -59,6 +60,53 @@ type Report = {
   phaseUpdatedAt?: string;
 };
 
+type AnalyticsRange = {
+  from: string;
+  to: string;
+};
+
+type MonthlyUsersPoint = {
+  month: string;
+  total: number;
+  producer?: number;
+  processor?: number;
+  distributor?: number;
+  warehouse?: number;
+  retailer?: number;
+};
+
+type MonthlyProductsPoint = {
+  month: string;
+  added: number;
+  removed: number;
+  net: number;
+  activeEndOfMonth?: number;
+};
+
+type MonthlyOverviewAnalyticsResponse = {
+  users: {
+    range: AnalyticsRange;
+    points: MonthlyUsersPoint[];
+    totals?: {
+      total?: number;
+      producer?: number;
+      processor?: number;
+      distributor?: number;
+      warehouse?: number;
+      retailer?: number;
+    };
+  };
+  products: {
+    range: AnalyticsRange;
+    points: MonthlyProductsPoint[];
+    totals?: {
+      added?: number;
+      removed?: number;
+      net?: number;
+    };
+  };
+};
+
 function readCookie(name: string) {
   const pair = document.cookie.split("; ").find((row) => row.startsWith(`${name}=`));
   return pair?.split("=")[1];
@@ -85,6 +133,9 @@ export default function AdminDashboardPage() {
   const [warehouseHistory, setWarehouseHistory] = useState<HistoryItem[]>([]);
   const [retailerHistory, setRetailerHistory] = useState<HistoryItem[]>([]);
   const [masterProductId, setMasterProductId] = useState("");
+  const [analytics, setAnalytics] = useState<MonthlyOverviewAnalyticsResponse | null>(null);
+  const [analyticsFrom, setAnalyticsFrom] = useState("");
+  const [analyticsTo, setAnalyticsTo] = useState("");
 
   const counts = useMemo(
     () => ({
@@ -105,12 +156,23 @@ export default function AdminDashboardPage() {
     ],
   );
 
-  async function loadAll(currentToken: string) {
+  const usersSeries = useMemo(() => analytics?.users.points ?? [], [analytics]);
+  const productsSeries = useMemo(() => analytics?.products.points ?? [], [analytics]);
+  const effectiveUsersTotal = analytics?.users.totals?.total ?? usersSeries.reduce((sum, p) => sum + p.total, 0);
+  const effectiveAdded = analytics?.products.totals?.added ?? productsSeries.reduce((sum, p) => sum + p.added, 0);
+  const effectiveRemoved = analytics?.products.totals?.removed ?? productsSeries.reduce((sum, p) => sum + p.removed, 0);
+
+  async function loadAll(currentToken: string, range?: { from?: string; to?: string }) {
     setLoading(true);
     setError(null);
 
     try {
-      const [pendingData, producersData, productsData, reportData, distData, wareData, retailData] = await Promise.all([
+      const q = new URLSearchParams();
+      if (range?.from) q.set("from", range.from);
+      if (range?.to) q.set("to", range.to);
+      const analyticsPath = `/admin/analytics/monthly/overview${q.toString() ? `?${q.toString()}` : ""}`;
+
+      const [pendingData, producersData, productsData, reportData, distData, wareData, retailData, analyticsData] = await Promise.all([
         apiFetch<PendingAccountsResponse>("/admin/accounts/pending", undefined, currentToken),
         apiFetch<Producer[]>("/admin/producers", undefined, currentToken),
         apiFetch<ProcessedProduct[]>("/admin/products", undefined, currentToken),
@@ -118,6 +180,7 @@ export default function AdminDashboardPage() {
         apiFetch<HistoryItem[]>("/distributor/history", undefined, currentToken).catch(() => []),
         apiFetch<HistoryItem[]>("/warehouse/history", undefined, currentToken).catch(() => []),
         apiFetch<HistoryItem[]>("/retailer/history", undefined, currentToken).catch(() => []),
+        apiFetch<MonthlyOverviewAnalyticsResponse>(analyticsPath, undefined, currentToken).catch(() => null),
       ]);
 
       setPending(Array.isArray(pendingData) ? pendingData : pendingData.producer ?? pendingData.producers ?? []);
@@ -127,6 +190,7 @@ export default function AdminDashboardPage() {
       setDistributorHistory(distData);
       setWarehouseHistory(wareData);
       setRetailerHistory(retailData);
+      setAnalytics(analyticsData);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load admin data");
     } finally {
@@ -156,6 +220,11 @@ export default function AdminDashboardPage() {
       body: JSON.stringify({ conclusion }),
     }, token);
     await loadAll(token);
+  }
+
+  async function refreshAnalytics() {
+    if (!token) return;
+    await loadAll(token, { from: analyticsFrom || undefined, to: analyticsTo || undefined });
   }
 
   useEffect(() => {
@@ -212,6 +281,9 @@ export default function AdminDashboardPage() {
             >
               Open Traceability
             </Link>
+            <Link className="inline-flex h-8 items-center justify-center rounded-lg border px-3 text-sm font-medium" href="/admin/entities">
+              Entities
+            </Link>
           </div>
         </div>
 
@@ -231,11 +303,90 @@ export default function AdminDashboardPage() {
 
         <Tabs defaultValue="verification" className="w-full">
           <TabsList>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="verification">Verification</TabsTrigger>
             <TabsTrigger value="users-products">Users & Products</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="analytics">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Monthly Analytics Filters</CardTitle>
+                  <CardDescription>Load monthly users and products overview from admin analytics APIs.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3 md:flex-row md:items-end">
+                  <div className="grid gap-2">
+                    <label className="text-xs text-muted-foreground">From</label>
+                    <Input type="date" value={analyticsFrom} onChange={(e) => setAnalyticsFrom(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-xs text-muted-foreground">To</label>
+                    <Input type="date" value={analyticsTo} onChange={(e) => setAnalyticsTo(e.target.value)} />
+                  </div>
+                  <Button onClick={() => void refreshAnalytics()} disabled={loading}>
+                    {loading ? "Loading..." : "Refresh Analytics"}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <MetricCard label="New Users" value={effectiveUsersTotal} />
+                <MetricCard label="Products Added" value={effectiveAdded} />
+                <MetricCard label="Products Removed" value={effectiveRemoved} />
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card className="border-emerald-200/80 bg-white/90">
+                  <CardHeader>
+                    <CardTitle>User Growth Trend</CardTitle>
+                    <CardDescription>Monthly registrations across all entities.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={usersSeries}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="month" />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="total" stroke="#059669" strokeWidth={3} dot={{ r: 4 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-amber-200/80 bg-white/90">
+                  <CardHeader>
+                    <CardTitle>Product Flow Trend</CardTitle>
+                    <CardDescription>Monthly added vs removed products.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={productsSeries}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="month" />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip />
+                        <Bar dataKey="added" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="removed" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <DataCard title="Monthly New Users" description="From /admin/analytics/monthly/overview">
+                  <MonthlyUsersTable data={usersSeries} loading={loading} />
+                </DataCard>
+                <DataCard title="Monthly Product Activity" description="Added / removed / net by month">
+                  <MonthlyProductsTable data={productsSeries} loading={loading} />
+                </DataCard>
+              </div>
+            </div>
+          </TabsContent>
 
           <TabsContent value="verification">
             <DataCard title="Pending Producers" description="Review and verify producer onboarding requests.">
@@ -281,6 +432,70 @@ export default function AdminDashboardPage() {
         </Tabs>
       </div>
     </main>
+  );
+}
+
+function MonthlyUsersTable({ data, loading }: { data: MonthlyUsersPoint[]; loading: boolean }) {
+  if (loading) return <p className="text-sm text-muted-foreground">Loading...</p>;
+  if (data.length === 0) return <p className="text-sm text-muted-foreground">No monthly user analytics found.</p>;
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Month</TableHead>
+          <TableHead>Total</TableHead>
+          <TableHead>Producer</TableHead>
+          <TableHead>Processor</TableHead>
+          <TableHead>Distributor</TableHead>
+          <TableHead>Warehouse</TableHead>
+          <TableHead>Retailer</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.map((row) => (
+          <TableRow key={row.month}>
+            <TableCell>{row.month}</TableCell>
+            <TableCell>{row.total}</TableCell>
+            <TableCell>{row.producer ?? 0}</TableCell>
+            <TableCell>{row.processor ?? 0}</TableCell>
+            <TableCell>{row.distributor ?? 0}</TableCell>
+            <TableCell>{row.warehouse ?? 0}</TableCell>
+            <TableCell>{row.retailer ?? 0}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function MonthlyProductsTable({ data, loading }: { data: MonthlyProductsPoint[]; loading: boolean }) {
+  if (loading) return <p className="text-sm text-muted-foreground">Loading...</p>;
+  if (data.length === 0) return <p className="text-sm text-muted-foreground">No monthly product analytics found.</p>;
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Month</TableHead>
+          <TableHead>Added</TableHead>
+          <TableHead>Removed</TableHead>
+          <TableHead>Net</TableHead>
+          <TableHead>Active EOM</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.map((row) => (
+          <TableRow key={row.month}>
+            <TableCell>{row.month}</TableCell>
+            <TableCell>{row.added}</TableCell>
+            <TableCell>{row.removed}</TableCell>
+            <TableCell>{row.net}</TableCell>
+            <TableCell>{row.activeEndOfMonth ?? 0}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 

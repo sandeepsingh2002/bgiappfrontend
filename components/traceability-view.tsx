@@ -1,13 +1,15 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { SampleTraceabilityData } from "@/lib/sample-traceability";
 import Link from "next/link";
 
 type TraceabilityViewProps = {
-  data: SampleTraceabilityData;
+  data: unknown;
 };
 
+type JsonRecord = Record<string, unknown>;
+
 function toDate(value: string) {
+  if (!value) return "N/A";
   return new Date(value).toLocaleString("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -22,10 +24,21 @@ function stageLabel(stage: string) {
 }
 
 export function TraceabilityView({ data }: TraceabilityViewProps) {
-  const origin = data.producerOrigins[0];
-  const geo = origin.rawProduct.farmFields.geoLocation;
-  const { distributionLeg1, distributionLeg2, warehouseStop, retailerStop, otherIngredients } = data.processedProduct;
-  const expiryDate = new Date(`${data.processedProduct.expiryDate}T23:59:59`);
+  const trace = (data ?? {}) as JsonRecord;
+  const origin = ((trace.producerOrigins as JsonRecord[] | undefined)?.[0] ?? {}) as JsonRecord;
+  const rawProduct = (origin.rawProduct ?? {}) as JsonRecord;
+  const farmFields = (rawProduct.farmFields ?? {}) as JsonRecord;
+  const geo = (farmFields.geoLocation ?? { lat: null, lng: null }) as JsonRecord;
+  const processedProduct = (trace.processedProduct ?? {}) as JsonRecord;
+  const distributionLeg1 = (processedProduct.distributionLeg1 ?? {}) as JsonRecord;
+  const distributionLeg2 = (processedProduct.distributionLeg2 ?? {}) as JsonRecord;
+  const warehouseStop = (processedProduct.warehouseStop ?? {}) as JsonRecord;
+  const retailerStop = (processedProduct.retailerStop ?? {}) as JsonRecord;
+  const otherIngredients = (processedProduct.otherIngredients as JsonRecord[] | undefined) ?? [];
+  const processor = (trace.processor ?? {}) as JsonRecord;
+  const batch = (trace.batch ?? {}) as JsonRecord;
+  const processingDetails = (processedProduct.processingDetails ?? {}) as JsonRecord;
+  const expiryDate = new Date(`${(processedProduct.expiryDate as string | undefined) ?? ""}T23:59:59`);
   const isExpired = new Date() > expiryDate;
 
   return (
@@ -36,7 +49,7 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Master Product Trace</p>
-                <CardTitle className="text-2xl md:text-3xl">{data.masterProductId}</CardTitle>
+                <CardTitle className="text-2xl md:text-3xl">{data?.masterProductId ?? "N/A"}</CardTitle>
               </div>
               <Badge
                 variant={isExpired ? "destructive" : "secondary"}
@@ -51,11 +64,11 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
               <span className="font-medium">Product:</span> {data.processedProduct.productName}
             </p>
             <p>
-              <span className="font-medium">Quantity:</span> {data.processedProduct.totalQuantityProduced}{" "}
-              {data.processedProduct.quantityUnit}
+              <span className="font-medium">Quantity:</span> {String(processedProduct.totalQuantityProduced ?? "N/A")}{" "}
+              {String(processedProduct.quantityUnit ?? "")}
             </p>
             <p className="md:col-span-2 break-all">
-              <span className="font-medium">QR:</span> {data.qrCodeUrl}
+              <span className="font-medium">QR:</span> {String(trace.qrCodeUrl ?? "N/A")}
             </p>
           </CardContent>
         </Card>
@@ -67,19 +80,19 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>
-                <span className="font-medium">Farmer:</span> {origin.producer.name}
+                <span className="font-medium">Farmer:</span> {String(((origin.producer ?? {}) as JsonRecord).name ?? "N/A")}
               </p>
               <p>
-                <span className="font-medium">Crop:</span> {origin.rawProduct.farmFields.cropName}
+                <span className="font-medium">Crop:</span> {String(farmFields.cropName ?? "N/A")}
               </p>
               <p>
-                <span className="font-medium">Farm Size:</span> {origin.rawProduct.farmFields.farmSizeAcres} acres
+                <span className="font-medium">Farm Size:</span> {String(farmFields.farmSizeAcres ?? "N/A")} acres
               </p>
               <p>
-                <span className="font-medium">Harvest Date:</span> {origin.rawProduct.farmFields.harvestDate}
+                <span className="font-medium">Harvest Date:</span> {String(farmFields.harvestDate ?? "N/A")}
               </p>
               <p>
-                <span className="font-medium">Geo Coordinates:</span> {geo.lat}, {geo.lng}
+                <span className="font-medium">Geo Coordinates:</span> {String(geo.lat ?? "N/A")}, {String(geo.lng ?? "N/A")}
               </p>
             </CardContent>
           </Card>
@@ -92,7 +105,7 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
               <div className="overflow-hidden rounded-lg border">
                 <iframe
                   title="Farm Location"
-                  src={`https://www.google.com/maps?q=${geo.lat},${geo.lng}&z=13&output=embed`}
+                  src={`https://www.google.com/maps?q=${String(geo.lat ?? "")},${String(geo.lng ?? "")}&z=13&output=embed`}
                   className="h-64 w-full md:h-72"
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"
@@ -109,19 +122,19 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>
-                <span className="font-medium">Processor:</span> {data.processor.companyName}
+                <span className="font-medium">Processor:</span> {String(processor.companyName ?? "N/A")}
               </p>
               <p>
-                <span className="font-medium">Batch:</span> {data.batch.batchId}
+                <span className="font-medium">Batch:</span> {String(batch.batchId ?? "N/A")}
               </p>
               <p>
-                <span className="font-medium">Manufactured:</span> {data.processedProduct.manufacturingDate}
+                <span className="font-medium">Manufactured:</span> {String(processedProduct.manufacturingDate ?? "N/A")}
               </p>
               <p>
-                <span className="font-medium">Expiry:</span> {data.processedProduct.expiryDate}
+                <span className="font-medium">Expiry:</span> {String(processedProduct.expiryDate ?? "N/A")}
               </p>
               <p>
-                <span className="font-medium">Packaging:</span> {data.processedProduct.processingDetails.packagingType}
+                <span className="font-medium">Packaging:</span> {String(processingDetails.packagingType ?? "N/A")}
               </p>
             </CardContent>
           </Card>
@@ -132,16 +145,16 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>
-                <span className="font-medium">Leg 1:</span> {distributionLeg1.distributorName}
+                <span className="font-medium">Leg 1:</span> {String(distributionLeg1.distributorName ?? "N/A")}
               </p>
               <p>
-                <span className="font-medium">Warehouse:</span> {warehouseStop.warehouseName}
+                <span className="font-medium">Warehouse:</span> {String(warehouseStop.warehouseName ?? "N/A")}
               </p>
               <p>
                 <span className="font-medium">Leg 2:</span> {distributionLeg2.distributorName}
               </p>
               <p>
-                <span className="font-medium">Retailer:</span> {retailerStop.retailerName}
+                <span className="font-medium">Retailer:</span> {String(retailerStop.retailerName ?? "N/A")}
               </p>
             </CardContent>
           </Card>
@@ -153,13 +166,13 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
               <CardTitle>Transport Leg 1 (Processor to Distributor)</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
-              <p><span className="font-medium">Transporter:</span> {distributionLeg1.distributorName}</p>
-              <p><span className="font-medium">Vehicle:</span> {distributionLeg1.vehicleId}</p>
-              <p><span className="font-medium">Dispatched:</span> {toDate(distributionLeg1.dispatchedAt)}</p>
-              <p><span className="font-medium">Received:</span> {toDate(distributionLeg1.receivedAt)}</p>
-              <p><span className="font-medium">Temp:</span> {distributionLeg1.startTemp}C to {distributionLeg1.endTemp}C</p>
-              <p><span className="font-medium">Humidity:</span> {distributionLeg1.startHumidity}% to {distributionLeg1.endHumidity}%</p>
-              <p className="sm:col-span-2"><span className="font-medium">Notes:</span> {distributionLeg1.notes}</p>
+              <p><span className="font-medium">Transporter:</span> {distributionLeg1?.distributorName ?? "N/A"}</p>
+              <p><span className="font-medium">Vehicle:</span> {distributionLeg1?.vehicleId ?? "N/A"}</p>
+              <p><span className="font-medium">Dispatched:</span> {toDate(distributionLeg1?.dispatchedAt)}</p>
+              <p><span className="font-medium">Received:</span> {toDate(distributionLeg1?.receivedAt)}</p>
+              <p><span className="font-medium">Temp:</span> {distributionLeg1?.startTemp ?? "N/A"}C to {distributionLeg1?.endTemp ?? "N/A"}C</p>
+              <p><span className="font-medium">Humidity:</span> {distributionLeg1?.startHumidity ?? "N/A"}% to {distributionLeg1?.endHumidity ?? "N/A"}%</p>
+              <p className="sm:col-span-2"><span className="font-medium">Notes:</span> {distributionLeg1?.notes ?? "N/A"}</p>
             </CardContent>
           </Card>
 
@@ -168,13 +181,13 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
               <CardTitle>Transport Leg 2 (Warehouse to Retail)</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
-              <p><span className="font-medium">Transporter:</span> {distributionLeg2.distributorName}</p>
-              <p><span className="font-medium">Vehicle:</span> {distributionLeg2.vehicleId}</p>
-              <p><span className="font-medium">Dispatched:</span> {toDate(distributionLeg2.dispatchedAt)}</p>
-              <p><span className="font-medium">Received:</span> {toDate(distributionLeg2.receivedAt)}</p>
-              <p><span className="font-medium">Temp:</span> {distributionLeg2.startTemp}C to {distributionLeg2.endTemp}C</p>
-              <p><span className="font-medium">Humidity:</span> {distributionLeg2.startHumidity}% to {distributionLeg2.endHumidity}%</p>
-              <p className="sm:col-span-2"><span className="font-medium">Notes:</span> {distributionLeg2.notes}</p>
+              <p><span className="font-medium">Transporter:</span> {distributionLeg2?.distributorName ?? "N/A"}</p>
+              <p><span className="font-medium">Vehicle:</span> {distributionLeg2?.vehicleId ?? "N/A"}</p>
+              <p><span className="font-medium">Dispatched:</span> {toDate(distributionLeg2?.dispatchedAt)}</p>
+              <p><span className="font-medium">Received:</span> {toDate(distributionLeg2?.receivedAt)}</p>
+              <p><span className="font-medium">Temp:</span> {distributionLeg2?.startTemp ?? "N/A"}C to {distributionLeg2?.endTemp ?? "N/A"}C</p>
+              <p><span className="font-medium">Humidity:</span> {distributionLeg2?.startHumidity ?? "N/A"}% to {distributionLeg2?.endHumidity ?? "N/A"}%</p>
+              <p className="sm:col-span-2"><span className="font-medium">Notes:</span> {distributionLeg2?.notes ?? "N/A"}</p>
             </CardContent>
           </Card>
         </div>
@@ -185,13 +198,13 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
               <CardTitle>Warehouse Details</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
-              <p><span className="font-medium">Warehouse:</span> {warehouseStop.warehouseName}</p>
-              <p><span className="font-medium">Quantity Received:</span> {warehouseStop.quantityReceived} kg</p>
-              <p><span className="font-medium">Received At:</span> {toDate(warehouseStop.receivedAt)}</p>
-              <p><span className="font-medium">Dispatched At:</span> {toDate(warehouseStop.dispatchedAt)}</p>
-              <p><span className="font-medium">Storage Temp:</span> {warehouseStop.storageTemp}C</p>
-              <p><span className="font-medium">Storage Humidity:</span> {warehouseStop.storageHumidity}%</p>
-              <p className="sm:col-span-2"><span className="font-medium">Notes:</span> {warehouseStop.notes}</p>
+              <p><span className="font-medium">Warehouse:</span> {warehouseStop?.warehouseName ?? "N/A"}</p>
+              <p><span className="font-medium">Quantity Received:</span> {warehouseStop?.quantityReceived ?? "N/A"} kg</p>
+              <p><span className="font-medium">Received At:</span> {toDate(warehouseStop?.receivedAt)}</p>
+              <p><span className="font-medium">Dispatched At:</span> {toDate(warehouseStop?.dispatchedAt)}</p>
+              <p><span className="font-medium">Storage Temp:</span> {warehouseStop?.storageTemp ?? "N/A"}C</p>
+              <p><span className="font-medium">Storage Humidity:</span> {warehouseStop?.storageHumidity ?? "N/A"}%</p>
+              <p className="sm:col-span-2"><span className="font-medium">Notes:</span> {warehouseStop?.notes ?? "N/A"}</p>
             </CardContent>
           </Card>
 
@@ -200,10 +213,10 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
               <CardTitle>Retailer Details</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
-              <p><span className="font-medium">Retailer:</span> {retailerStop.retailerName}</p>
-              <p><span className="font-medium">Received At:</span> {toDate(retailerStop.receivedAt)}</p>
-              <p className="sm:col-span-2"><span className="font-medium">Shelf Location:</span> {retailerStop.shelfLocation}</p>
-              <p className="sm:col-span-2"><span className="font-medium">Notes:</span> {retailerStop.notes}</p>
+              <p><span className="font-medium">Retailer:</span> {retailerStop?.retailerName ?? "N/A"}</p>
+              <p><span className="font-medium">Received At:</span> {toDate(retailerStop?.receivedAt)}</p>
+              <p className="sm:col-span-2"><span className="font-medium">Shelf Location:</span> {retailerStop?.shelfLocation ?? "N/A"}</p>
+              <p className="sm:col-span-2"><span className="font-medium">Notes:</span> {retailerStop?.notes ?? "N/A"}</p>
             </CardContent>
           </Card>
         </div>
@@ -222,10 +235,10 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
                 </div>
               ))}
               <div className="rounded-lg border p-3">
-                <p>Cleaning: {data.processedProduct.processingDetails.cleaning ? "Yes" : "No"}</p>
-                <p>Washing: {data.processedProduct.processingDetails.washing ? "Yes" : "No"}</p>
-                <p>Stone Grinding: {data.processedProduct.processingDetails.stoneGrinding ? "Yes" : "No"}</p>
-                <p>Fortified: {data.processedProduct.processingDetails.fortified ? "Yes" : "No"}</p>
+                <p>Cleaning: {processingDetails.cleaning ? "Yes" : "No"}</p>
+                <p>Washing: {processingDetails.washing ? "Yes" : "No"}</p>
+                <p>Stone Grinding: {processingDetails.stoneGrinding ? "Yes" : "No"}</p>
+                <p>Fortified: {processingDetails.fortified ? "Yes" : "No"}</p>
               </div>
             </CardContent>
           </Card>
@@ -235,7 +248,7 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
               <CardTitle>History Logs</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              {data.histories.distributorHistory.map((entry) => (
+              {(((trace.histories ?? {}) as JsonRecord).distributorHistory as JsonRecord[] | undefined ?? []).map((entry) => (
                 <div key={entry._id} className="rounded-lg border p-3">
                   <p className="font-medium">{entry.leg.toUpperCase()} - {entry.distributorId}</p>
                   <p>Vehicle: {entry.vehicleId}</p>
@@ -243,14 +256,14 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
                   <p className="text-muted-foreground">{entry.notes}</p>
                 </div>
               ))}
-              {data.histories.warehouseHistory.map((entry) => (
+              {(((trace.histories ?? {}) as JsonRecord).warehouseHistory as JsonRecord[] | undefined ?? []).map((entry) => (
                 <div key={entry._id} className="rounded-lg border p-3">
                   <p className="font-medium">Warehouse {entry.warehouseId}</p>
                   <p>Storage: {entry.storageTemp}C / {entry.storageHumidity}%</p>
                   <p className="text-muted-foreground">{entry.notes}</p>
                 </div>
               ))}
-              {data.histories.retailerHistory.map((entry) => (
+              {(((trace.histories ?? {}) as JsonRecord).retailerHistory as JsonRecord[] | undefined ?? []).map((entry) => (
                 <div key={entry._id} className="rounded-lg border p-3">
                   <p className="font-medium">Retailer {entry.retailerId}</p>
                   <p>Shelf: {entry.shelfLocation}</p>
@@ -266,7 +279,7 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
             <CardTitle>Supply Chain Timeline</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {data.timeline.map((item) => (
+            {((trace.timeline as JsonRecord[] | undefined) ?? []).map((item) => (
               <div key={`${item.stage}-${item.refId}`} className="rounded-lg border bg-muted/25 p-3 text-sm">
                 <p className="font-medium">{stageLabel(item.stage)}</p>
                 <p className="text-muted-foreground">{toDate(item.time)}</p>
@@ -282,7 +295,7 @@ export function TraceabilityView({ data }: TraceabilityViewProps) {
           </CardHeader>
           <CardContent>
             <Link
-              href={`/${data.masterProductId}/report`}
+              href={`/${data?.masterProductId ?? ""}/report`}
               className="inline-flex rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
             >
               Go to Consumer Report Page
